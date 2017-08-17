@@ -14,19 +14,12 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,-q -Wall -O3 -nostdlib")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")
 
-option(RELEASE "Release build" OFF)
-
-if (RELEASE)
-	add_definitions(-DRELEASE)
-endif(RELEASE)
-
 link_directories(
   ${CMAKE_SOURCE_DIR}/../
 )
 
 add_executable(${PROJECT_NAME}.elf
 	main.c
-	log.c
 )
 
 target_link_libraries(${PROJECT_NAME}.elf
