@@ -25,13 +25,14 @@
 #include <psp2kern/kernel/sysmem.h>
 #include <psp2kern/kernel/suspend.h>
 #include <psp2kern/bt.h>
-#include <psp2kern/ctrl.h>
-#include <psp2/touch.h>
 #include <psp2/motion.h>
 #include <taihen.h>
 
-#include "log.h"
+//#include "log.h"
+#include <string.h>
 #include "../DSMotionLibrary.h"
+
+extern unsigned int ksceKernelGetSystemTimeLow();
 
 #define DS4_VID   0x054C
 #define DS4_PID   0x05C4
@@ -121,28 +122,36 @@ static unsigned int ds4_mac1 = 0;
 static struct ds4_input_report ds4_input;
 static unsigned char* recv_buff = NULL;
 
-static int accel_x_sum = 0;
-static int accel_y_sum = 0;
-static int accel_z_sum = 0;
+#define NB_DATA 64
 
-static int gyro_x_sum = 0;
-static int gyro_y_sum = 0;
-static int gyro_z_sum = 0;
+static struct accelGyroData previousData[NB_DATA];
+static int currentData = NB_DATA-1;
+static int globalCounter = 0;
 
+static int accel_sum[3] = {0, 0, 0};
+static int gyro_sum[3] = {0, 0, 0};
 static int samplesCount = 0;
+
+unsigned int dsGetCurrentTimestamp()
+{
+    return ksceKernelGetSystemTimeLow();
+}
+
+unsigned int dsGetCurrentCounter()
+{
+    return globalCounter;
+}
 
 int dsResetAccelGyroSampling()
 {
     if (!ds4_connected)
         return -1;
-    
-    accel_x_sum = 0;
-    accel_y_sum = 0;
-    accel_z_sum = 0;
 
-    gyro_x_sum = 0;
-    gyro_y_sum = 0;
-    gyro_z_sum = 0;
+    for (int i = 0; i < 3; i++)
+    {
+        accel_sum[i] = 0;
+        gyro_sum[i] = 0;
+    }
 
     samplesCount = 0;
 
@@ -156,8 +165,8 @@ int dsGetSampledAccelGyro(signed short oAccel[3], signed short oGyro[3])
     
     if (samplesCount > 0)
     {
-        signed short accel[3] = {accel_x_sum / samplesCount, accel_y_sum / samplesCount, accel_z_sum / samplesCount};
-        signed short gyro[3] = {gyro_x_sum / samplesCount, gyro_y_sum / samplesCount, gyro_z_sum / samplesCount};
+        signed short accel[3] = {accel_sum[0] / samplesCount, accel_sum[1] / samplesCount, accel_sum[2] / samplesCount};
+        signed short gyro[3] = {gyro_sum[0] / samplesCount, gyro_sum[1] / samplesCount, gyro_sum[2] / samplesCount};
     
         ksceKernelMemcpyKernelToUser((uintptr_t)oAccel, (const void *)accel, sizeof(accel));
         ksceKernelMemcpyKernelToUser((uintptr_t)oGyro, (const void *)gyro, sizeof(gyro));
@@ -165,22 +174,23 @@ int dsGetSampledAccelGyro(signed short oAccel[3], signed short oGyro[3])
         dsResetAccelGyroSampling();
     }
     else
-        dsGetInstantAccelGyro(oAccel, oGyro);
+    {
+        struct accelGyroData* data = &previousData[currentData];
+        ksceKernelMemcpyKernelToUser((uintptr_t)oAccel, (const void *)data->accel, 3*sizeof(signed short));
+        ksceKernelMemcpyKernelToUser((uintptr_t)oGyro, (const void *)data->gyro, 3*sizeof(signed short));
+    }
     
     return 0;
 }
 
-int dsGetInstantAccelGyro(signed short oAccel[3], signed short oGyro[3])
+int dsGetInstantAccelGyro(unsigned int iIndex, struct accelGyroData* oData)
 {
     if (!ds4_connected)
         return -1;
 
-    signed short accel[3] = {ds4_input.accel_x, ds4_input.accel_y, ds4_input.accel_z};
-    signed short gyro[3] = {ds4_input.gyro_x, ds4_input.gyro_y, ds4_input.gyro_z};
-    
-    ksceKernelMemcpyKernelToUser((uintptr_t)oAccel, (const void *)accel, sizeof(accel));
-    ksceKernelMemcpyKernelToUser((uintptr_t)oGyro, (const void *)gyro, sizeof(gyro));
-    
+    int curIndex = (currentData-(iIndex%NB_DATA)+NB_DATA)%NB_DATA;
+    ksceKernelMemcpyKernelToUser((uintptr_t)oData, (const void *)&previousData[curIndex], sizeof(struct accelGyroData));
+
     return 0;
 }
 
@@ -206,12 +216,11 @@ DECL_FUNC_HOOK(SceBt_ksceBtReadEvent, SceBtEvent *events, int num_events)
 
 	if (ret >= 0)
     {
-		//LOG("Communication detected: %d events\n", num_events);
-
         for (int i = 0 ; i < num_events ; i++)
         {
             SceBtEvent* event = &events[i];
             //LOG("Connection event %d with %d %d\n", event->id, event->mac0, event->mac1);
+
             if (!ds4_connected && 0x05 == event->id)
             {
                 unsigned short vid_pid[2];
@@ -220,26 +229,19 @@ DECL_FUNC_HOOK(SceBt_ksceBtReadEvent, SceBtEvent *events, int num_events)
 
                 if (is_ds4(vid_pid))
                 {
-                    LOG("DualShock 4 connected\n");
-                    log_flush();
-
                     ds4_mac0 = event->mac0;
                     ds4_mac1 = event->mac1;
                     ds4_input_reset();
                     ds4_connected = 1;
                     
                     dsResetAccelGyroSampling();
+                    globalCounter = 0;
                 }
             }
             else if (ds4_connected && event->mac0 == ds4_mac0 && event->mac1 == ds4_mac1)
             {
                 if (0x06 == event->id)
-                {
                     ds4_connected = 0;
-                    
-                    LOG("DualShock 4 disconnected\n");
-                    log_flush();
-                }
                 else if (NULL != recv_buff)
                 {
                     if (0x0A == event->id)
@@ -247,18 +249,26 @@ DECL_FUNC_HOOK(SceBt_ksceBtReadEvent, SceBtEvent *events, int num_events)
                         if (0x11 == recv_buff[0])
                         {
                             memcpy(&ds4_input, recv_buff, sizeof(ds4_input));
-                            //LOG("Timestamp: %d, %d\n", ds4_input.cnt2, ds4_input.cnt3);
-                            //LOG("Accel: %d, %d, %d\n", ds4_input.accel_x, ds4_input.accel_y, ds4_input.accel_z);
-                            //LOG("Gyro: %d, %d, %d\n", ds4_input.gyro_x, ds4_input.gyro_y, ds4_input.gyro_z);
-                            //log_flush();
-                            
-                            accel_x_sum += ds4_input.accel_x;
-                            accel_y_sum += ds4_input.accel_y;
-                            accel_z_sum += ds4_input.accel_z;
 
-                            gyro_x_sum += ds4_input.gyro_x;
-                            gyro_y_sum += ds4_input.gyro_y;
-                            gyro_z_sum += ds4_input.gyro_z;
+                            currentData = (currentData+1)%NB_DATA;
+                            struct accelGyroData* data = &previousData[currentData];
+                            
+                            data->accel[0] = ds4_input.accel_x;
+                            data->accel[1] = ds4_input.accel_y;
+                            data->accel[2] = ds4_input.accel_z;
+
+                            data->gyro[0] = ds4_input.gyro_x;
+                            data->gyro[1] = ds4_input.gyro_y;
+                            data->gyro[2] = ds4_input.gyro_z;
+
+                            data->timestamp = ksceKernelGetSystemTimeLow();
+                            data->counter = globalCounter++;
+                            
+                            for (int i = 0; i < 3; i++)
+                            {
+                                accel_sum[i] = data->accel[i];
+                                gyro_sum[i] = data->gyro[i];
+                            }
                             
                             samplesCount++;
                         }
@@ -281,11 +291,7 @@ DECL_FUNC_HOOK(SceBt_ksceBtHidTransfer, unsigned int mac0, unsigned int mac1, Sc
     if (ret >= 0 && ds4_connected && mac0 == ds4_mac0 && mac1 == ds4_mac1)
     {
         if (NULL != request && NULL != request->buffer && request->length >= sizeof(ds4_input))
-        {
             recv_buff = (unsigned char*)request->buffer;
-            //LOG("Buffer %x ready for answer\n", (unsigned int)recv_buff);
-            //log_flush();
-        }
         else
             recv_buff = NULL;
     }
@@ -304,29 +310,27 @@ int module_start(SceSize argc, const void *args)
 	int ret;
 	tai_module_info_t SceBt_modinfo;
 
-	log_reset();
-
-	LOG("ds4hook by OperationNT\n");
+	//log_reset();
+	//LOG("dsmotion kernel by OperationNT\n");
 
 	SceBt_modinfo.size = sizeof(SceBt_modinfo);
 	ret = taiGetModuleInfoForKernel(KERNEL_PID, "SceBt", &SceBt_modinfo);
 	if (ret < 0) {
-		LOG("Error finding SceBt module\n");
+		//LOG("Error finding SceBt module\n");
 		goto error_find_scebt;
 	}
 
 	/* SceBt hooks */
-	BIND_FUNC_EXPORT_HOOK(SceBt_ksceBtReadEvent, KERNEL_PID,
-		"SceBt", TAI_ANY_LIBRARY, 0x5ABB9A9D);
-    LOG("ksceBtReadEvent hook result: %x\n", SceBt_ksceBtReadEvent_hook_uid);
+	BIND_FUNC_EXPORT_HOOK(SceBt_ksceBtReadEvent, KERNEL_PID, "SceBt", TAI_ANY_LIBRARY, 0x5ABB9A9D);
+    //LOG("ksceBtReadEvent hook result: %x\n", SceBt_ksceBtReadEvent_hook_uid);
 
-	BIND_FUNC_EXPORT_HOOK(SceBt_ksceBtHidTransfer, KERNEL_PID,
-		"SceBt", TAI_ANY_LIBRARY, 0xF9DCEC77);
-    LOG("ksceBtHidTransfer hook result: %x\n", SceBt_ksceBtHidTransfer_hook_uid);
+	BIND_FUNC_EXPORT_HOOK(SceBt_ksceBtHidTransfer, KERNEL_PID, "SceBt", TAI_ANY_LIBRARY, 0xF9DCEC77);
+    //LOG("ksceBtHidTransfer hook result: %x\n", SceBt_ksceBtHidTransfer_hook_uid);
     
-	LOG("module_start finished successfully!\n");
+	//LOG("module_start finished successfully!\n");
+    //log_flush();
     
-    log_flush();
+    memset(previousData, 0, sizeof(previousData));
 
 	return SCE_KERNEL_START_SUCCESS;
 
@@ -346,7 +350,7 @@ int module_stop(SceSize argc, const void *args)
 	UNBIND_FUNC_HOOK(SceBt_ksceBtReadEvent);
     UNBIND_FUNC_HOOK(SceBt_ksceBtHidTransfer);
 
-	log_flush();
+	//log_flush();
 
 	return SCE_KERNEL_STOP_SUCCESS;
 }
