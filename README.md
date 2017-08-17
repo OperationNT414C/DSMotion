@@ -36,5 +36,7 @@ Replace **TITLEID00** by a title identifier which needs motion control or by **A
 
 ### Credits
 
- * Most credit goes to **xerpi** for his "ds3vita" and "ds4vita" plugins source code which helped me a lot!
+ * **xerpi** for his "ds3vita" and "ds4vita" plugins source code which helped me a lot to understand BlueTooth communication!
+ * **TheFlow** for his "VitaShell" source code which helped me to understand how to export functions from kernel plugin and call them in user plugin
+ * **YifanLu** for Henkaku which makes everything possible (except coffee) on this device!
  
