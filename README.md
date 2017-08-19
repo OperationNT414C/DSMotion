@@ -29,6 +29,7 @@ Replace **TITLEID00** by a title identifier which needs motion control or by **A
 
 ### Limitations
 
+ * It only works for titles which are not signed (homebrews or Vitamin/MaiDumpTools dumps).
  * If a DualShock 3 controller is used, it must not be directly plugged with USB on the PS TV otherwise, signal will be sent through USB instead of BlueTooth (and it won't be catched): use an external charger for the controller.
  * It doesn't work well on classic PS Vita with "ds4vita": for an unknown reason, motion control samples seems to be too much spaced over time.
  * It hooks documented "SceMotion" user functions instead of undocumented "SceMotionDev" kernel functions: if we could understand those kernel functions, we could have more compatibility with a single kernel plugin (no more need for a user plugin).
