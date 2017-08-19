@@ -12,6 +12,5 @@ dsmotion:
       functions:
         - dsGetCurrentTimestamp
         - dsGetCurrentCounter
-        - dsResetAccelGyroSampling
         - dsGetSampledAccelGyro
         - dsGetInstantAccelGyro
