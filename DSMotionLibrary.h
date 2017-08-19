@@ -12,8 +12,7 @@ struct accelGyroData
 unsigned int dsGetCurrentTimestamp();
 unsigned int dsGetCurrentCounter();
 
-int dsResetAccelGyroSampling();
-int dsGetSampledAccelGyro(signed short oAccel[3], signed short oGyro[3]);
+unsigned int dsGetSampledAccelGyro(unsigned int iSamplingTimeMS, signed short oAccel[3], signed short oGyro[3]);
 int dsGetInstantAccelGyro(unsigned int iIndex, struct accelGyroData* oData);
 
 #endif
