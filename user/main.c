@@ -64,7 +64,6 @@ DECL_FUNC_HOOK(SceMotion_sceMotionStartSampling)
 	int ret = TAI_CONTINUE(int, SceMotion_sceMotionStartSampling_ref);
     if (ret >= 0)
     {
-        dsResetAccelGyroSampling();
         initTimestamp = dsGetCurrentTimestamp();
         initCounter = dsGetCurrentCounter();
     }
@@ -80,25 +79,25 @@ DECL_FUNC_HOOK(SceMotion_sceMotionGetState, SceMotionState *motionState)
         signed short accel[3];
         signed short gyro[3];
 
-        if (dsGetSampledAccelGyro(accel, gyro) >= 0)
+        if (dsGetSampledAccelGyro(100, accel, gyro) > 0)
         {
             motionState->hostTimestamp = sceKernelGetProcessTimeWide();
-            
-            motionState->acceleration.x = -(float)gyro[2] / 0x2000;
-            motionState->acceleration.y = (float)gyro[0] / 0x2000;
-            motionState->acceleration.z = -(float)gyro[1] / 0x2000;
 
-            // 2608.6 = 0x2000 / PI
-            motionState->angularVelocity.x = (float)accel[0] / 2607.6f;
-            motionState->angularVelocity.y = -(float)accel[2] / 2608.6f;
-            motionState->angularVelocity.z = (float)accel[1] / 2608.6f;
-            
-            int maxComp = (abs(gyro[1]) > abs(gyro[0])) ? 1 : 0;
-            maxComp = (abs(gyro[2]) > abs(gyro[maxComp])) ? 2 : maxComp;
+            motionState->acceleration.x = -(float)accel[2] / 0x2000;
+            motionState->acceleration.y = (float)accel[0] / 0x2000;
+            motionState->acceleration.z = -(float)accel[1] / 0x2000;
 
-            motionState->basicOrientation.x = (2 == maxComp) ? sign(gyro[2]) : 0.f;
-            motionState->basicOrientation.y = (0 == maxComp) ? -sign(gyro[0]) : 0.f;
-            motionState->basicOrientation.z = (1 == maxComp) ? sign(gyro[1]) : 0.f;
+            // 2607.6 = 0x2000 / PI
+            motionState->angularVelocity.x = (float)gyro[0] / 2607.6f;
+            motionState->angularVelocity.y = -(float)gyro[2] / 2607.6f;
+            motionState->angularVelocity.z = (float)gyro[1] / 2607.6f;
+            
+            int maxComp = (abs(accel[1]) > abs(accel[0])) ? 1 : 0;
+            maxComp = (abs(accel[2]) > abs(accel[maxComp])) ? 2 : maxComp;
+
+            motionState->basicOrientation.x = (2 == maxComp) ? sign(accel[2]) : 0.f;
+            motionState->basicOrientation.y = (0 == maxComp) ? -sign(accel[0]) : 0.f;
+            motionState->basicOrientation.z = (1 == maxComp) ? sign(accel[1]) : 0.f;
             
             float accelNorm = fastsqrt(motionState->acceleration.x*motionState->acceleration.x
                                      + motionState->acceleration.y*motionState->acceleration.y
@@ -173,14 +172,14 @@ DECL_FUNC_HOOK(SceMotion_sceMotionGetSensorState, SceMotionSensorState *sensorSt
             {
                 SceMotionSensorState* curState = &sensorState[i];
 
-                curState->accelerometer.x = -(float)data.gyro[2] / 0x2000;
-                curState->accelerometer.y = (float)data.gyro[0] / 0x2000;
-                curState->accelerometer.z = -(float)data.gyro[1] / 0x2000;
+                curState->accelerometer.x = -(float)data.accel[2] / 0x2000;
+                curState->accelerometer.y = (float)data.accel[0] / 0x2000;
+                curState->accelerometer.z = -(float)data.accel[1] / 0x2000;
 
                 // 2608.6 = 0x2000 / PI
-                curState->gyro.x = (float)data.accel[0] / 2607.6f;
-                curState->gyro.y = -(float)data.accel[2] / 2608.6f;
-                curState->gyro.z = (float)data.accel[1] / 2608.6f;
+                curState->gyro.x = (float)data.gyro[0] / 2607.6f;
+                curState->gyro.y = -(float)data.gyro[2] / 2608.6f;
+                curState->gyro.z = (float)data.gyro[1] / 2608.6f;
 
                 curState->timestamp = data.timestamp - initTimestamp;
                 curState->counter = data.counter - initCounter;
@@ -198,12 +197,12 @@ DECL_FUNC_HOOK(SceMotion_sceMotionGetBasicOrientation, SceFVector3 *basicOrienta
         struct accelGyroData data;
         if (dsGetInstantAccelGyro(0, &data) >= 0)
         {
-            int maxComp = (abs(data.gyro[1]) > abs(data.gyro[0])) ? 1 : 0;
-            maxComp = (abs(data.gyro[2]) > abs(data.gyro[maxComp])) ? 2 : maxComp;
+            int maxComp = (abs(data.accel[1]) > abs(data.accel[0])) ? 1 : 0;
+            maxComp = (abs(data.accel[2]) > abs(data.accel[maxComp])) ? 2 : maxComp;
 
-            basicOrientation->x = (2 == maxComp) ? sign(data.gyro[2]) : 0.f;
-            basicOrientation->y = (0 == maxComp) ? -sign(data.gyro[0]) : 0.f;
-            basicOrientation->z = (1 == maxComp) ? sign(data.gyro[1]) : 0.f;
+            basicOrientation->x = (2 == maxComp) ? sign(data.accel[2]) : 0.f;
+            basicOrientation->y = (0 == maxComp) ? -sign(data.accel[0]) : 0.f;
+            basicOrientation->z = (1 == maxComp) ? sign(data.accel[1]) : 0.f;
         }
     }
     return ret;
