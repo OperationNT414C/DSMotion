@@ -6,6 +6,8 @@ User plugin changes:
 
 Documentation changes:
  * Compatibility list updated (special thanks to "stranno" who made a lot of tests!)
+ * Limitation on signed titles removed: after some tests on original titles, it works fine
+ * New limitation discovered: apparently, PS Vita can activate a magnometer which is used specially by games with horizontal conrol issues
 
 
 ## 1.0
