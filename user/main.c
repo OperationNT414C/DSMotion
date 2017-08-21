@@ -109,9 +109,9 @@ DECL_FUNC_HOOK(SceMotion_sceMotionGetState, SceMotionState *motionState)
                 normAccel.y = motionState->acceleration.y / accelNorm;
                 normAccel.z = motionState->acceleration.z / accelNorm;
                 
-                motionState->deviceQuat.x = initDir.y*normAccel.z - initDir.z*normAccel.y;
-                motionState->deviceQuat.y = initDir.z*normAccel.x - initDir.x*normAccel.z;
-                motionState->deviceQuat.z = initDir.x*normAccel.y - initDir.y*normAccel.x;
+                motionState->deviceQuat.x = initDir.z*normAccel.y - initDir.y*normAccel.z;
+                motionState->deviceQuat.y = initDir.x*normAccel.z - initDir.z*normAccel.x;
+                motionState->deviceQuat.z = initDir.y*normAccel.x - initDir.x*normAccel.y;
                 motionState->deviceQuat.w = initDir.x*normAccel.x + initDir.y*normAccel.y + initDir.z*normAccel.z;
                 
                 float sqx = motionState->deviceQuat.x*motionState->deviceQuat.x;
@@ -189,25 +189,6 @@ DECL_FUNC_HOOK(SceMotion_sceMotionGetSensorState, SceMotionSensorState *sensorSt
     return ret;
 }
 
-DECL_FUNC_HOOK(SceMotion_sceMotionGetBasicOrientation, SceFVector3 *basicOrientation)
-{
-	int ret = TAI_CONTINUE(int, SceMotion_sceMotionGetBasicOrientation_ref, basicOrientation);
-    if (ret >= 0 && NULL != basicOrientation)
-    {
-        struct accelGyroData data;
-        if (dsGetInstantAccelGyro(0, &data) >= 0)
-        {
-            int maxComp = (abs(data.accel[1]) > abs(data.accel[0])) ? 1 : 0;
-            maxComp = (abs(data.accel[2]) > abs(data.accel[maxComp])) ? 2 : maxComp;
-
-            basicOrientation->x = (2 == maxComp) ? sign(data.accel[2]) : 0.f;
-            basicOrientation->y = (0 == maxComp) ? -sign(data.accel[0]) : 0.f;
-            basicOrientation->z = (1 == maxComp) ? sign(data.accel[1]) : 0.f;
-        }
-    }
-    return ret;
-}
-
 void _start() __attribute__ ((weak, alias ("module_start")));
 
 #define BIND_FUNC_IMPORT_HOOK(name, module_nid, lib_nid, func_nid) \
@@ -228,9 +209,6 @@ int module_start(SceSize argc, const void *args)
     BIND_FUNC_IMPORT_HOOK(SceMotion_sceMotionGetSensorState, TAI_MAIN_MODULE, 0xDC571B3F, 0x47D679EA);
     //LOG("sceMotionGetSensorState hook result: %x\n", SceMotion_sceMotionGetSensorState_hook_uid);
 
-    BIND_FUNC_IMPORT_HOOK(SceMotion_sceMotionGetBasicOrientation, TAI_MAIN_MODULE, 0xDC571B3F, 0x4F28BFE0);
-    //LOG("sceMotionGetBasicOrientation hook result: %x\n", SceMotion_sceMotionGetBasicOrientation_hook_uid);
-
     //log_flush();
 
     return SCE_KERNEL_START_SUCCESS;
@@ -248,7 +226,6 @@ int module_stop(SceSize argc, const void *args)
 	UNBIND_FUNC_HOOK(SceMotion_sceMotionStartSampling);
 	UNBIND_FUNC_HOOK(SceMotion_sceMotionGetState);
     UNBIND_FUNC_HOOK(SceMotion_sceMotionGetSensorState);
-    UNBIND_FUNC_HOOK(SceMotion_sceMotionGetBasicOrientation);
 
 	//log_flush();
 
