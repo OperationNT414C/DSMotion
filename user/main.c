@@ -48,6 +48,37 @@ static float fastsqrt(float val)
     return u.f;
 }
 
+#define M_PI 3.14159265359f
+
+static float sine(float x)
+{
+    static float B = 4.f/M_PI;
+    static float C = -4.f/(M_PI*M_PI);
+
+    float y = B * x + C * x * abs(x);
+
+    //  const float Q = 0.775;
+    float P = 0.225f;
+    y = P * (y * abs(y) - y) + y;   // Q * y + P * y * abs(y)
+    return y;
+}
+
+static float cosine(float x)
+{
+    return sine(x + (M_PI / 2.f));
+}
+
+static float arccosine(float x)
+{
+    float a=1.43f+0.59f*x;
+    a=(a+(2.f+2.f*x)/a)/2.f;
+    float b=1.65f-1.41f*x;
+    b=(b+(2.f-2.f*x)/b)/2.f;
+    float c=0.88f-0.77f*x;
+    c=(c+(2.f-a)/c)/2.f;
+    return 8.f/3.f*c-b/3.f;
+}
+
 static float identityMat[16] = {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f};
 static SceFVector3 initDir = {0.f, -1.f, 0.f};
 
@@ -88,9 +119,9 @@ DECL_FUNC_HOOK(SceMotion_sceMotionGetState, SceMotionState *motionState)
             motionState->acceleration.z = -(float)accel[1] / 0x2000;
 
             // 2607.6 = 0x2000 / PI
-            motionState->angularVelocity.x = (float)gyro[0] / 2607.6f;
-            motionState->angularVelocity.y = -(float)gyro[2] / 2607.6f;
-            motionState->angularVelocity.z = (float)gyro[1] / 2607.6f;
+            motionState->angularVelocity.x = (float)gyro[0] / 2607.6f;  // Pitch
+            motionState->angularVelocity.y = -(float)gyro[2] / 2607.6f; // Roll
+            motionState->angularVelocity.z = (float)gyro[1] / 2607.6f;  // Yaw
             
             int maxComp = (abs(accel[1]) > abs(accel[0])) ? 1 : 0;
             maxComp = (abs(accel[2]) > abs(accel[maxComp])) ? 2 : maxComp;
@@ -108,11 +139,22 @@ DECL_FUNC_HOOK(SceMotion_sceMotionGetState, SceMotionState *motionState)
                 normAccel.x = motionState->acceleration.x / accelNorm;
                 normAccel.y = motionState->acceleration.y / accelNorm;
                 normAccel.z = motionState->acceleration.z / accelNorm;
-                
+
                 motionState->deviceQuat.x = initDir.z*normAccel.y - initDir.y*normAccel.z;
                 motionState->deviceQuat.y = initDir.x*normAccel.z - initDir.z*normAccel.x;
                 motionState->deviceQuat.z = initDir.y*normAccel.x - initDir.x*normAccel.y;
-                motionState->deviceQuat.w = initDir.x*normAccel.x + initDir.y*normAccel.y + initDir.z*normAccel.z;
+                
+                float angle = arccosine(initDir.x*normAccel.x + initDir.y*normAccel.y + initDir.z*normAccel.z);
+                float half_sin = sine(0.5f * angle);
+                float half_cos = cosine(0.5f * angle);
+                motionState->deviceQuat.w = half_cos;
+                
+                float crossNorm = fastsqrt(motionState->deviceQuat.x*motionState->deviceQuat.x
+                                         + motionState->deviceQuat.y*motionState->deviceQuat.y
+                                         + motionState->deviceQuat.z*motionState->deviceQuat.z);
+                motionState->deviceQuat.x *= half_sin / crossNorm;
+                motionState->deviceQuat.y *= half_sin / crossNorm;
+                motionState->deviceQuat.z *= half_sin / crossNorm;
                 
                 float sqx = motionState->deviceQuat.x*motionState->deviceQuat.x;
                 float sqy = motionState->deviceQuat.y*motionState->deviceQuat.y;
