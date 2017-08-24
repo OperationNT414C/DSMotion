@@ -1,3 +1,13 @@
+## 1.2
+
+User plugin changes:
+ * Fix device orientation computation: highly improve camera stability and fix some inverted axis issues
+
+Documentation changes:
+ * New limitation discovered: don't turn your controller upside down or the orientation computation will go wrong
+ * Explanation about some perceived inverted axis issues: please try to test the game behavior on a real PS Vita before reporting issues on this subject!
+
+
 ## 1.1
 
 User plugin changes:
