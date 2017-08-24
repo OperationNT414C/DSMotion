@@ -29,8 +29,9 @@ Replace **TITLEID00** by a title identifier which needs motion control or by **A
  * PCSF00349 - Flower - The game is playable.
  * PCSF00007 - WipEout 2048 - The game can be played with motion commands option.
  * PCSA00029 - Uncharted Golden Abyss - River game at chapter 12 and other balance mini-games can be completed.
- * PCSB00031 - Virtua Tennis 4 - "Match VR" mode has inverted horizontal controls.
- * PCSF00024 - Gravity Rush - "No gravity" mode has inverted horizontal controls.
+ * PCSB00360 - Rayman Legends - Murfy can now perform actions which requires motion control.
+ * PCSB00031 - Virtua Tennis 4 - "Match VR" mode could feel it has inverted horizontal controls (read limitations).
+ * PCSF00024 - Gravity Rush - "No gravity" mode could feel it inverted horizontal controls (read limitations).
 
 
 ### Limitations
@@ -38,8 +39,9 @@ Replace **TITLEID00** by a title identifier which needs motion control or by **A
  * If a DualShock 3 controller is used, it must not be directly plugged with USB on the PS TV otherwise, signal will be sent through USB instead of BlueTooth (and it won't be catched): use an external charger for the controller.
  * It doesn't work well on classic PS Vita with "ds4vita": for an unknown reason, motion control samples seems to be too much spaced over time.
  * It hooks documented "SceMotion" user functions instead of undocumented "SceMotionDev" kernel functions: if we could understand those kernel functions, we could have more compatibility with a single kernel plugin (no more need for a user plugin).
- * Device orientation quaternion and rotation matrix are not currently accurate: they give unstable result and they don't support full orientation, feel free to give help if you have some maths/IMU skills!
- * Some games (specially those with inverted horizontal controls) call functions to activate the PS Vita magnetometer: DualShock controllers don't have this feature.
+ * Computed orientation is wrong when the controller is turned upside down (it could happen in a game when you try to look too verticaly high).
+ * Currently, gyroscope data is not exploited during orientation compute (due to drift problems I had when I tried), feel free to give help if you have some maths/IMU skills!
+ * Some games could be perceived like they have inverted horizontal controls (specially during FPS and TPS viewpoints) but it is a wrong impression (on a real PS Vita, tilting the device on the left also makes the view goes to the right and vice versa).
 
 
 ### Credits
