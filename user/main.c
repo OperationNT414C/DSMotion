@@ -31,6 +31,9 @@
 #include <string.h>
 #include "../DSMotionLibrary.h"
 
+// Comment this define to have smoother orientation (but some movements will be ignored)
+#define EULER_ANGLES
+
 #define abs(val) ((val < 0) ? -val : val)
 #define sign(val) ((val > 0) ? 1 : ((val < 0) ? -1 : 0))
 
@@ -68,6 +71,48 @@ static float cosine(float x)
     return sine(x + (M_PI / 2.f));
 }
 
+#ifdef EULER_ANGLES
+
+float atan2_approx(float y, float x)
+{
+    static float ONEQTR_PI = M_PI / 4.0;
+	static float THRQTR_PI = 3.0 * M_PI / 4.0;
+	float r, angle;
+	float abs_y = abs(y) + 1e-10f;
+	if ( x < 0.0f )
+	{
+		r = (x + abs_y) / (abs_y - x);
+		angle = THRQTR_PI;
+	}
+	else
+	{
+		r = (x - abs_y) / (x + abs_y);
+		angle = ONEQTR_PI;
+	}
+	angle += (0.1963f * r * r - 0.9817f) * r;
+	if ( y < 0.0f )
+		return -angle;
+
+    return angle;
+}
+
+static void eulerToQuaternion(SceFQuaternion* quat, float x, float y, float z)
+{
+	float cy = cosine(z * 0.5f);
+	float sy = sine(z * 0.5f);
+	float cr = cosine(y * 0.5f);
+	float sr = sine(y * 0.5f);
+	float cp = cosine(x * 0.5f);
+	float sp = sine(x * 0.5f);
+
+	quat->w = cy * cr * cp + sy * sr * sp;
+	quat->x = cy * sr * cp - sy * cr * sp;
+	quat->y = cy * cr * sp + sy * sr * cp;
+	quat->z = sy * cr * cp - cy * sr * sp;
+}
+
+#else
+
 static float arccosine(float x)
 {
     float a=1.43f+0.59f*x;
@@ -79,16 +124,60 @@ static float arccosine(float x)
     return 8.f/3.f*c-b/3.f;
 }
 
+#endif
+
+/*static void quaternionProduct(SceFQuaternion* res, SceFQuaternion* q1, SceFQuaternion* q2)
+{
+    res->w = q1->w*q2->w - q1->x*q2->x - q1->y*q2->y - q1->z*q2->z;
+    res->x = q1->w*q2->x + q1->x*q2->w - q1->y*q2->z + q1->z*q2->y;
+    res->y = q1->w*q2->y + q1->x*q2->z + q1->y*q2->w - q1->z*q2->x;
+    res->z = q1->w*q2->z - q1->x*q2->y + q1->y*q2->x + q1->z*q2->w;
+}*/
+
+static int computeQuaternionFromAccel(SceFQuaternion* oRes, SceFVector3* iAccel)
+{
+    float accelNorm = fastsqrt(iAccel->x*iAccel->x + iAccel->y*iAccel->y + iAccel->z*iAccel->z);
+    if (accelNorm < 0.001f)
+        return 0;
+
+    SceFVector3 normAccel = { iAccel->x / accelNorm , iAccel->y / accelNorm , iAccel->z / accelNorm };
+    
+#ifdef EULER_ANGLES
+    float pitch = atan2_approx(normAccel.z, -normAccel.y);
+    float roll = atan2_approx(-normAccel.x, -normAccel.z*sign(-pitch));
+
+    eulerToQuaternion(oRes, 0.f, pitch, roll);
+#else
+    static SceFVector3 initDir = {0.f, -1.f, 0.f};
+    
+    oRes->x = initDir.z*normAccel.y - initDir.y*normAccel.z;
+    oRes->y = initDir.x*normAccel.z - initDir.z*normAccel.x;
+    oRes->z = initDir.y*normAccel.x - initDir.x*normAccel.y;
+    
+    float angle = arccosine(initDir.x*normAccel.x + initDir.y*normAccel.y + initDir.z*normAccel.z);
+    float half_sin = sine(0.5f * angle);
+    float half_cos = cosine(0.5f * angle);
+    oRes->w = half_cos;
+    
+    float crossNorm = fastsqrt(oRes->x*oRes->x + oRes->y*oRes->y + oRes->z*oRes->z);
+    oRes->x *= half_sin / crossNorm;
+    oRes->y *= half_sin / crossNorm;
+    oRes->z *= half_sin / crossNorm;
+#endif
+    
+    return 1;
+}
+
 static float identityMat[16] = {1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f};
-static SceFVector3 initDir = {0.f, -1.f, 0.f};
+static SceFQuaternion identityQuat = {0.f, 0.f, 0.f, 1.f};
+
+static unsigned int initTimestamp;
+static unsigned int initCounter;
 
 #define DECL_FUNC_HOOK(name, ...) \
 	static tai_hook_ref_t name##_ref; \
 	static SceUID name##_hook_uid = -1; \
 	static int name##_hook_func(__VA_ARGS__)
-
-static unsigned int initTimestamp;
-static unsigned int initCounter;
 
 DECL_FUNC_HOOK(SceMotion_sceMotionStartSampling)
 {
@@ -129,33 +218,9 @@ DECL_FUNC_HOOK(SceMotion_sceMotionGetState, SceMotionState *motionState)
             motionState->basicOrientation.x = (2 == maxComp) ? sign(accel[2]) : 0.f;
             motionState->basicOrientation.y = (0 == maxComp) ? -sign(accel[0]) : 0.f;
             motionState->basicOrientation.z = (1 == maxComp) ? sign(accel[1]) : 0.f;
-            
-            float accelNorm = fastsqrt(motionState->acceleration.x*motionState->acceleration.x
-                                     + motionState->acceleration.y*motionState->acceleration.y
-                                     + motionState->acceleration.z*motionState->acceleration.z);
-            if (accelNorm > 0.001f)
-            {
-                SceFVector3 normAccel;
-                normAccel.x = motionState->acceleration.x / accelNorm;
-                normAccel.y = motionState->acceleration.y / accelNorm;
-                normAccel.z = motionState->acceleration.z / accelNorm;
 
-                motionState->deviceQuat.x = initDir.z*normAccel.y - initDir.y*normAccel.z;
-                motionState->deviceQuat.y = initDir.x*normAccel.z - initDir.z*normAccel.x;
-                motionState->deviceQuat.z = initDir.y*normAccel.x - initDir.x*normAccel.y;
-                
-                float angle = arccosine(initDir.x*normAccel.x + initDir.y*normAccel.y + initDir.z*normAccel.z);
-                float half_sin = sine(0.5f * angle);
-                float half_cos = cosine(0.5f * angle);
-                motionState->deviceQuat.w = half_cos;
-                
-                float crossNorm = fastsqrt(motionState->deviceQuat.x*motionState->deviceQuat.x
-                                         + motionState->deviceQuat.y*motionState->deviceQuat.y
-                                         + motionState->deviceQuat.z*motionState->deviceQuat.z);
-                motionState->deviceQuat.x *= half_sin / crossNorm;
-                motionState->deviceQuat.y *= half_sin / crossNorm;
-                motionState->deviceQuat.z *= half_sin / crossNorm;
-                
+            if (computeQuaternionFromAccel(&motionState->deviceQuat, &motionState->acceleration))
+            {
                 float sqx = motionState->deviceQuat.x*motionState->deviceQuat.x;
                 float sqy = motionState->deviceQuat.y*motionState->deviceQuat.y;
                 float sqz = motionState->deviceQuat.z*motionState->deviceQuat.z;
@@ -187,11 +252,7 @@ DECL_FUNC_HOOK(SceMotion_sceMotionGetState, SceMotionState *motionState)
             }
             else
             {
-                motionState->deviceQuat.x = 0.f;
-                motionState->deviceQuat.y = 0.f;
-                motionState->deviceQuat.z = 0.f;
-                motionState->deviceQuat.w = 1.f;
-                
+                memcpy(&motionState->deviceQuat, &identityQuat, sizeof(identityQuat));
                 memcpy(&motionState->rotationMatrix, identityMat, sizeof(identityMat));
             }
             
