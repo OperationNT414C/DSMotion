@@ -1,7 +1,7 @@
 ## 1.2
 
 User plugin changes:
- * Fix device orientation computation: highly improve camera stability and fix some inverted axis issues
+ * Partially fix device orientation computation: highly improve camera stability and fix some inverted axis issues
 
 Documentation changes:
  * New limitation discovered: don't turn your controller upside down or the orientation computation will go wrong
