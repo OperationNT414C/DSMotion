@@ -2,6 +2,8 @@
 
 Henkaku plugins which adds motion control support for PlayStation TV with DualShock controllers
 
+It can also be used on a real PS Vita with "ds3vita" or "ds4vita" plugins to replace the console internal motion sensors by those from the controller.
+
 There are 2 plugins:
  * Kernel plugin **dsmotion.skprx**: it hooks BlueTooth calls to catch DualShock controller packets and exposes user services to get the intercepted motion data
  * User plugin **dsmotion.suprx**: it calls the kernel plugin services and reinterprets the given data for SceMotion functions return
@@ -37,7 +39,6 @@ Replace **TITLEID00** by a title identifier which needs motion control or by **A
 ### Limitations
 
  * If a DualShock 3 controller is used, it must not be directly plugged with USB on the PS TV otherwise, signal will be sent through USB instead of BlueTooth (and it won't be catched): use an external charger for the controller.
- * It doesn't work well on classic PS Vita with "ds4vita": for an unknown reason, motion control samples seems to be too much spaced over time.
  * It hooks documented "SceMotion" user functions instead of undocumented "SceMotionDev" kernel functions: if we could understand those kernel functions, we could have more compatibility with a single kernel plugin (no more need for a user plugin).
  * Computed orientation is wrong when the controller is turned upside down (it could happen in a game when you try to look too verticaly high).
  * Currently, gyroscope data is not exploited during orientation compute (due to drift problems I had when I tried), feel free to give help if you have some maths/IMU skills!
